@@ -1,3 +1,6 @@
+
+
+
 /*
  * Copyright (C) 2014 The Android Open Source Project
  *
@@ -23,6 +26,7 @@ import android.content.IntentFilter;
 import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
+import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Rect;
 import android.graphics.Typeface;
@@ -140,6 +144,9 @@ public class LegionFace extends CanvasWatchFaceService {
          */
         boolean mLowBitAmbient;
 
+        int mBackgroundColor;
+        float mTimeTextSize;
+
         @Override
         public void onCreate(SurfaceHolder holder) {
             super.onCreate(holder);
@@ -153,7 +160,8 @@ public class LegionFace extends CanvasWatchFaceService {
             mYOffset = resources.getDimension(R.dimen.digital_y_offset);
 
             mBackgroundPaint = new Paint();
-            mBackgroundPaint.setColor(resources.getColor(R.color.digital_background));
+            mBackgroundColor = resources.getColor(R.color.digital_background);
+            mBackgroundPaint.setColor(mBackgroundColor);
 
             mTextPaint = new Paint();
             mTextPaint = createTextPaint(resources.getColor(R.color.digital_text));
@@ -167,7 +175,7 @@ public class LegionFace extends CanvasWatchFaceService {
                 //TODO: Add a distibutable graphic to use here.  (really, make this configurable)
                 //TODO: This needs to be changed to a graphic you add for the Github version to function.
 
-                Drawable temp = Drawable.createFromResourceStream(resources, new TypedValue(), resources.getAssets().open("calvin.png"), null);
+                Drawable temp = Drawable.createFromResourceStream(resources, new TypedValue(), resources.getAssets().open("punchcard_flair.png"), null);
                 mChinBitmap = ((BitmapDrawable) temp).getBitmap();
             } catch (IOException e) {
                 e.printStackTrace();
@@ -240,11 +248,11 @@ public class LegionFace extends CanvasWatchFaceService {
             boolean isRound = insets.isRound();
             mXOffset = resources.getDimension(isRound
                     ? R.dimen.digital_x_offset_round : R.dimen.digital_x_offset);
-            float textSize = resources.getDimension(isRound
+            mTimeTextSize = resources.getDimension(isRound
                     ? R.dimen.digital_text_size_round : R.dimen.digital_text_size);
             mChinHeight = insets.getSystemWindowInsetBottom();
 
-            mTextPaint.setTextSize(textSize);
+            mTextPaint.setTextSize(mTimeTextSize);
         }
 
         @Override
@@ -262,14 +270,30 @@ public class LegionFace extends CanvasWatchFaceService {
         @Override
         public void onAmbientModeChanged(boolean inAmbientMode) {
             super.onAmbientModeChanged(inAmbientMode);
-            if (mAmbient != inAmbientMode) {
-                mAmbient = inAmbientMode;
+            Resources resources = LegionFace.this.getResources();
+            if (inAmbientMode) {
+
                 if (mLowBitAmbient) {
                     mTextPaint.setAntiAlias(!inAmbientMode);
                 }
+                mTextPaint.setColor(Color.WHITE);
+                mStatusTextPaint.setColor(Color.WHITE);
+                mBackgroundPaint.setColor(Color.BLACK);
+                mStatusTextPaint.setTextSize(20f);
+
+                mTextPaint.setTextSize(mTimeTextSize*0.80f);
+
+                invalidate();
+            } else {
+
+                mStatusTextPaint.setColor(resources.getColor(R.color.digital_text));
+                mTextPaint.setColor(resources.getColor(R.color.digital_text));
+                mBackgroundPaint.setColor(mBackgroundColor);
+                mStatusTextPaint.setTextSize(25f);
+                mTextPaint.setTextSize(mTimeTextSize);
                 invalidate();
             }
-
+            mAmbient = inAmbientMode;
             // Whether the timer should be running depends on whether we're visible (as well as
             // whether we're in ambient mode), so we may need to start or stop the timer.
             updateTimer();
@@ -277,35 +301,53 @@ public class LegionFace extends CanvasWatchFaceService {
 
         @Override
         public void onDraw(Canvas canvas, Rect bounds) {
-            int chinOffset = 0;
+
             int width = bounds.width();
             int height = bounds.height();
             canvas.drawRect(0, 0, bounds.width(), bounds.height(), mBackgroundPaint);
-            // Draw the background, scaled to fit.
-            if (mChinScaledBitmap == null
-                    || mChinScaledBitmap.getWidth() != width) {
-                mChinScaledBitmap = Bitmap.createScaledBitmap(mChinBitmap,
-                        width, mChinBitmap.getHeight(), true /* filter */);
-            }
-            //TODO: Check/fix below for non-round  (the offset there is probably ~35)
-            if (mChinHeight > 0) { //Moto 360 (or something else with something like a chin)
-                chinOffset = 2 * mChinHeight + 10;
-            } else{ //something else.  Offset as if the 360.
-                chinOffset = 70;
-            }
-            canvas.drawBitmap(mChinScaledBitmap, 0, height - chinOffset, null);
 
+            IntentFilter filter = new IntentFilter(Intent.ACTION_BATTERY_CHANGED);
+            Intent batteryStatus = getApplicationContext().registerReceiver(null, filter);
+            int level = 0;
+            if (batteryStatus != null) {
+                level = batteryStatus.getIntExtra(BatteryManager.EXTRA_LEVEL, -1);
+            }
 
+            String timeText;
+            String statusText;
+            String secondsText;
+            if (mAmbient){
+                timeText = String.format("%d:%02d", mTime.hour, mTime.minute);
+                secondsText = "";
+                statusText = String.format("w:%02d%% p:%02d%%",level,0);
+            } else {
+                timeText = String.format("%d:%02d:%02d", mTime.hour, mTime.minute, mTime.second);
+                secondsText = ":00";
+
+                statusText = String.format("⌚:%02d%% \uD83D\uDCF1:%02d%%",level,0);
+                // Draw the flair, scaled to fit.  (It is not drawn in Ambient Mode.  For now)
+                if (mChinScaledBitmap == null
+                        || mChinScaledBitmap.getWidth() != width) {
+                    mChinScaledBitmap = Bitmap.createScaledBitmap(mChinBitmap,
+                            width, mChinBitmap.getHeight(), true /* filter */);
+                }
+                int chinOffset;
+                //TODO: Check/fix below for non-round  (the offset there is probably ~35)
+                if (mChinHeight > 0) { //Moto 360 (or something else with something like a chin)
+                    chinOffset = 2 * mChinHeight + 10;
+                } else{ //something else.  Offset as if the 360.
+                    chinOffset = 70;
+                }
+                canvas.drawBitmap(mChinScaledBitmap, 0, height - chinOffset, null);
+            }
 
 
             // Draw H:MM in ambient mode or H:MM:SS in interactive mode.
             mTime.setToNow();
-            String text = mAmbient
-                    ? String.format("%d:%02d", mTime.hour, mTime.minute)
-                    : String.format("%d:%02d:%02d", mTime.hour, mTime.minute, mTime.second);
-            float textWidth;
-            String secondsText = mAmbient ? "" : ":00";
 
+            float textWidth;
+
+            //TODO: This probably breaks in Ambient Mode.
             if (mTime.hour < 10){
                 textWidth = mTextPaint.measureText("0:00"+secondsText);
             }else {
@@ -313,20 +355,17 @@ public class LegionFace extends CanvasWatchFaceService {
             }
             int halfWidth= width/2;
             mXOffset = halfWidth - textWidth/2;
-            canvas.drawText(text, mXOffset, mYOffset, mTextPaint);
+            canvas.drawText(timeText, mXOffset, mYOffset, mTextPaint);
 
-            IntentFilter filter = new IntentFilter(Intent.ACTION_BATTERY_CHANGED);
-            Intent batteryStatus = getApplicationContext().registerReceiver(null, filter);
 
-            int level = batteryStatus.getIntExtra(BatteryManager.EXTRA_LEVEL, -1);
 
-            text = String.format("⌚:%02d%% \uD83D\uDCF1:%02d%%",level,0);
-            textWidth = mStatusTextPaint.measureText(text);
+
+            textWidth = mStatusTextPaint.measureText(statusText);
             mXOffset = halfWidth - textWidth/2;
 
-            canvas.drawText(text,mXOffset, height - 100, mStatusTextPaint);
+            canvas.drawText(statusText,mXOffset, height - 100, mStatusTextPaint);
 
-            text = mTime.format("%a %b %d");
+            String text = mTime.format("%a %b %d");
             textWidth = mStatusTextPaint.measureText(text);
             mXOffset = halfWidth - textWidth/2;
             canvas.drawText(text,mXOffset,height-150, mStatusTextPaint);
@@ -425,7 +464,9 @@ public class LegionFace extends CanvasWatchFaceService {
 
         private boolean updateUiForKey(String configKey, int color) {
             if (configKey.equals(BACK_KEY) ){
-                mBackgroundPaint.setColor(color);
+                mBackgroundColor = color;
+                //TODO save this.  It is always reset on startup.
+                mBackgroundPaint.setColor(mBackgroundColor);
             } else {
                 Log.w(TAG, "Ignoring unknown config key: " + configKey);
                 return false;
