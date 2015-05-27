@@ -164,6 +164,9 @@ public class LegionFace extends CanvasWatchFaceService {
             mStatusTextPaint.setTextSize(25f);
 
             try {
+                //TODO: Add a distibutable graphic to use here.  (really, make this configurable)
+                //TODO: This needs to be changed to a graphic you add for the Github version to function.
+
                 Drawable temp = Drawable.createFromResourceStream(resources, new TypedValue(), resources.getAssets().open("calvin.png"), null);
                 mChinBitmap = ((BitmapDrawable) temp).getBitmap();
             } catch (IOException e) {
