@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">Legion</string>
+    <string name="my_digital_name">Legion</string>
+    <string name="title_activity_config">ConfigActivity</string>
+    <string name="hello_round">Hello Round World!</string>
+    <string name="hello_square">Hello Square World!</string>
+</resources>
